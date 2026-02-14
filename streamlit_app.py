@@ -1,12 +1,11 @@
 import streamlit as st
 import requests
 import pandas as pd
-import urllib.parse   # <-- You forgot this import
+import urllib.parse
+from bs4 import BeautifulSoup
 
 st.set_page_config(page_title="ESG News & Score", layout="wide")
-st.title("ESG News Extractor + ESG Score (NewsAPI Stable Version)")
-
-API_KEY = st.secrets["NEWSAPI_KEY"]
+st.title("ESG News Extractor + ESG Score (Google News – No API Key Needed)")
 
 # --- ESG classification ---
 def classify_esg(title: str) -> int:
@@ -28,12 +27,10 @@ def classify_esg(title: str) -> int:
 # --- Simple sentiment ---
 def sentiment_score(title: str) -> float:
     title = (title or "").lower()
-
     positive_words = ["improve", "growth", "positive", "sustainable", "award", "recognition"]
     negative_words = ["risk", "lawsuit", "pollution", "controversy", "violation", "fraud"]
 
     score = 0.5
-
     if any(w in title for w in positive_words):
         score += 0.25
     if any(w in title for w in negative_words):
@@ -49,33 +46,31 @@ def compute_esg_score(sentiment, esg_strength):
 company = st.text_input("Enter company name", "Microsoft")
 
 if st.button("Fetch ESG News"):
-    with st.spinner("Fetching ESG news from NewsAPI..."):
+    with st.spinner("Fetching ESG news from Google News..."):
 
-        # ✅ Correct query placement + indentation
-        query = (
-            f"{company} AND (sustainability OR ESG OR environment OR climate OR governance OR ethics)"
-        )
+        query = f"{company} sustainability"
+        rss_url = f"https://news.google.com/rss/search?q={urllib.parse.quote(query)}&hl=en-IN&gl=IN&ceid=IN:en"
 
-        # ✅ Correct URL placement + indentation
-        url = (
-            f"https://newsapi.org/v2/everything?"
-            f"q={urllib.parse.quote(query)}&"
-            f"language=en&"
-            f"sortBy=publishedAt&"
-            f"apiKey={API_KEY}"
-        )
+        response = requests.get(rss_url)
+        soup = BeautifulSoup(response.content, "xml")
 
-        response = requests.get(url)
-        data = response.json()
+        items = soup.find_all("item")
 
-        if data.get("status") != "ok" or len(data.get("articles", [])) == 0:
+        if not items:
             st.warning("No ESG articles found for this company.")
             st.stop()
 
-        df = pd.DataFrame(data["articles"])
+        titles = [item.title.text for item in items]
+        links = [item.link.text for item in items]
+        dates = [item.pubDate.text for item in items]
 
-        df["date"] = pd.to_datetime(df["publishedAt"], errors="coerce")
+        df = pd.DataFrame({
+            "title": titles,
+            "url": links,
+            "date": dates
+        })
 
+        df["date"] = pd.to_datetime(df["date"], errors="coerce")
         df["esg_strength"] = df["title"].apply(classify_esg)
         df["sentiment"] = df["title"].apply(sentiment_score)
         df["esg_score"] = df.apply(
