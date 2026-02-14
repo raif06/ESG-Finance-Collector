@@ -29,16 +29,44 @@ data["Overall ESG"] = data[
     ["Environmental", "Social", "Governance"]
 ].mean(axis=1)
 
+# ---- ESG Ranking ----
+data["Rank"] = data["Overall ESG"].rank(ascending=False)
+
+# ---- ESG Grade Classification ----
+def esg_grade(score):
+    if score >= 85:
+        return "AAA"
+    elif score >= 75:
+        return "AA"
+    elif score >= 65:
+        return "A"
+    else:
+        return "BBB"
+
+data["ESG Grade"] = data["Overall ESG"].apply(esg_grade)
+
+# ===============================
+# VISUAL ANALYTICS SECTION
+# ===============================
+
 # --- Overall ESG comparison ---
 st.subheader("Overall ESG Comparison")
 st.bar_chart(data.set_index("Company")["Overall ESG"])
 
 st.divider()
 
+# --- ESG Ranking Table ---
+st.subheader("ESG Ranking")
+st.dataframe(
+    data.sort_values("Rank")[["Company", "Overall ESG", "ESG Grade", "Rank"]]
+)
+
+st.divider()
+
 # --- ESG pillar comparison ---
 st.subheader("ESG Pillar Comparison")
 st.bar_chart(
-    data.set_index("Company")[["Environmental","Social","Governance"]]
+    data.set_index("Company")[["Environmental", "Social", "Governance"]]
 )
 
 st.divider()
