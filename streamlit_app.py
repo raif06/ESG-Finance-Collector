@@ -5,41 +5,58 @@ import yfinance as yf
 st.title("ESG Finance Collector Dashboard")
 st.write("Interactive ESG Analytics")
 
-# ---- Automatic ESG data fetch ----
-tickers = ["AAPL", "MSFT", "TSLA", "AMZN", "GOOG"]  # Add more tickers if needed
-data = pd.DataFrame(columns=["Company", "Environmental", "Social", "Governance"])
+# ===============================
+# Step 1: Define cached ESG fetch
+# ===============================
+@st.cache_data(show_spinner=True)
+def fetch_esg_data(tickers):
+    data = pd.DataFrame(columns=["Company", "Environmental", "Social", "Governance"])
+    
+    for t in tickers:
+        company = yf.Ticker(t)
+        info = company.info
+        try:
+            data = pd.concat([data, pd.DataFrame([{
+                "Company": info.get("shortName", t),
+                "Environmental": info.get("environmentScore", 0),
+                "Social": info.get("socialScore", 0),
+                "Governance": info.get("governanceScore", 0)
+            }])], ignore_index=True)
+        except KeyError:
+            st.warning(f"ESG data not available for {t}")
+    
+    data.fillna(0, inplace=True)
+    return data
 
-for t in tickers:
-    company = yf.Ticker(t)
-    info = company.info
-    try:
-        data = pd.concat([data, pd.DataFrame([{
-            "Company": info["shortName"],
-            "Environmental": info.get("environmentScore", 0),
-            "Social": info.get("socialScore", 0),
-            "Governance": info.get("governanceScore", 0)
-        }])], ignore_index=True)
-    except KeyError:
-        st.warning(f"ESG data not available for {t}")
+# ===============================
+# Step 2: Optional Refresh Button
+# ===============================
+if st.button("🔄 Refresh ESG Data"):
+    st.cache_data.clear()
+    st.success("Cache cleared! Reloading data...")
 
-data.fillna(0, inplace=True)
+# ===============================
+# Step 3: Fetch data
+# ===============================
+tickers = ["AAPL", "MSFT", "TSLA", "AMZN", "GOOG"]  # Add more tickers here
+data = fetch_esg_data(tickers)
 
-# ✅ Clean column names
+# ===============================
+# Step 4: Clean and validate
+# ===============================
 data.columns = data.columns.str.strip()
-
-# ✅ Validate dataset
 required_cols = ["Company", "Environmental", "Social", "Governance"]
+
 if not all(col in data.columns for col in required_cols):
     st.error("Dataset must contain columns: Company, Environmental, Social, Governance")
     st.stop()
 
-# ---- Calculate Overall ESG Score ----
+# ===============================
+# Step 5: Calculate ESG Scores, Rank, Grade
+# ===============================
 data["Overall ESG"] = data[["Environmental", "Social", "Governance"]].mean(axis=1)
-
-# ---- ESG Ranking ----
 data["Rank"] = data["Overall ESG"].rank(ascending=False)
 
-# ---- ESG Grade Classification ----
 def esg_grade(score):
     if score >= 85:
         return "AAA"
@@ -50,20 +67,19 @@ def esg_grade(score):
     else:
         return "BBB"
 
-# ✅ Apply ESG Grade BEFORE top company
 data["ESG Grade"] = data["Overall ESG"].apply(esg_grade)
 
-# ---- Top ESG Performer Highlight ----
+# ---- Top ESG Company Highlight ----
 top_company = data.sort_values("Overall ESG", ascending=False).iloc[0]
 st.success(
     f"🏆 Top ESG Company: {top_company['Company']} ({top_company['ESG Grade']})"
 )
 
 # ===============================
-# VISUAL ANALYTICS SECTION
+# VISUAL ANALYTICS
 # ===============================
 
-# --- Overall ESG comparison ---
+# --- Overall ESG Comparison ---
 st.subheader("Overall ESG Comparison")
 st.bar_chart(data.set_index("Company")["Overall ESG"])
 
@@ -77,7 +93,7 @@ st.dataframe(
 
 st.divider()
 
-# --- ESG pillar comparison ---
+# --- ESG Pillar Comparison ---
 st.subheader("ESG Pillar Comparison")
 st.bar_chart(
     data.set_index("Company")[["Environmental", "Social", "Governance"]]
@@ -85,7 +101,7 @@ st.bar_chart(
 
 st.divider()
 
-# --- Individual company analysis ---
+# --- Individual Company Analysis ---
 company = st.selectbox(
     "Select a Company for Detailed View",
     data["Company"]
