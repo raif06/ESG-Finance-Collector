@@ -43,6 +43,14 @@ def esg_grade(score):
     else:
         return "BBB"
 
+# ---- Top ESG Performer Highlight ----
+top_company = data.sort_values("Overall ESG", ascending=False).iloc[0]
+
+st.success(
+    f"🏆 Top ESG Company: {top_company['Company']} "
+    f"({top_company['ESG Grade']})"
+)
+
 data["ESG Grade"] = data["Overall ESG"].apply(esg_grade)
 
 # ===============================
