@@ -1,122 +1,20 @@
 import streamlit as st
+import requests
 import pandas as pd
-import yfinance as yf
-import json
 
-st.title("ESG Finance Collector Dashboard")
-st.write("Interactive ESG Analytics for S&P 500 Companies")
+st.title("ESG News Extractor (GDELT)")
 
-# ===============================
-# Step 1: Cached function to fetch ESG data
-# ===============================
-@st.cache_data(show_spinner=True)
-def fetch_esg_data_batch(ticker_file="sp500-tickers.json", chunk_size=50):
-    """Fetch ESG data for a large batch of tickers with caching."""
-    with open(ticker_file) as f:
-        tickers = json.load(f)
+company = st.text_input("Enter company name", "Microsoft")
 
-    data = pd.DataFrame(columns=["Company", "Environmental", "Social", "Governance"])
+if st.button("Fetch ESG News"):
+    query = f"{company} AND (sustainability OR environment OR governance OR ethics)"
+    url = f"https://api.gdeltproject.org/api/v2/doc/doc?query={query}&mode=ArtList&format=json"
 
-    for i in range(0, len(tickers), chunk_size):
-        batch = tickers[i:i + chunk_size]
-        for t in batch:
-            company = yf.Ticker(t)
-            info = company.info
-            try:
-                data = pd.concat([data, pd.DataFrame([{
-                    "Company": info.get("shortName", t),
-                    "Environmental": info.get("environmentScore", 0),
-                    "Social": info.get("socialScore", 0),
-                    "Governance": info.get("governanceScore", 0)
-                }])], ignore_index=True)
-            except KeyError:
-                st.warning(f"ESG data not available for {t}")
+    response = requests.get(url)
+    data = response.json()
 
-    data.fillna(0, inplace=True)
-    return data
-
-# ===============================
-# Step 2: Refresh button
-# ===============================
-if st.button("🔄 Refresh ESG Data"):
-    st.cache_data.clear()
-    st.success("Cache cleared! Reloading ESG data...")
-
-# ===============================
-# Step 3: Fetch data with progress
-# ===============================
-with st.spinner("Fetching ESG data for all companies..."):
-    data = fetch_esg_data_batch("sp500-tickers.json")
-st.success("✅ ESG data loaded successfully!")
-
-# ===============================
-# Step 4: Clean and validate
-# ===============================
-data.columns = data.columns.str.strip()
-required_cols = ["Company", "Environmental", "Social", "Governance"]
-
-if not all(col in data.columns for col in required_cols):
-    st.error("Dataset must contain columns: Company, Environmental, Social, Governance")
-    st.stop()
-
-# ===============================
-# Step 5: Calculate ESG Scores, Rank, Grade
-# ===============================
-data["Overall ESG"] = data[["Environmental", "Social", "Governance"]].mean(axis=1)
-data["Rank"] = data["Overall ESG"].rank(ascending=False)
-
-def esg_grade(score):
-    if score >= 85:
-        return "AAA"
-    elif score >= 75:
-        return "AA"
-    elif score >= 65:
-        return "A"
+    if "articles" in data:
+        df = pd.DataFrame(data["articles"])
+        st.write(df)
     else:
-        return "BBB"
-
-data["ESG Grade"] = data["Overall ESG"].apply(esg_grade)
-
-# ---- Top ESG Company Highlight ----
-top_company = data.sort_values("Overall ESG", ascending=False).iloc[0]
-st.success(
-    f"🏆 Top ESG Company: {top_company['Company']} ({top_company['ESG Grade']})"
-)
-
-# ===============================
-# VISUAL ANALYTICS
-# ===============================
-
-# --- Overall ESG Comparison ---
-st.subheader("Overall ESG Comparison")
-st.bar_chart(data.set_index("Company")["Overall ESG"])
-
-st.divider()
-
-# --- ESG Ranking Table ---
-st.subheader("ESG Ranking")
-st.dataframe(
-    data.sort_values("Rank")[["Company", "Overall ESG", "ESG Grade", "Rank"]]
-)
-
-st.divider()
-
-# --- ESG Pillar Comparison ---
-st.subheader("ESG Pillar Comparison")
-st.bar_chart(
-    data.set_index("Company")[["Environmental", "Social", "Governance"]]
-)
-
-st.divider()
-
-# --- Individual Company Analysis ---
-company = st.selectbox(
-    "Select a Company for Detailed View",
-    data["Company"]
-)
-
-selected_data = data[data["Company"] == company]
-
-st.subheader(f"Detailed ESG Scores for {company}")
-st.dataframe(selected_data)
-st.bar_chart(selected_data.set_index("Company"))
+        st.warning("No ESG articles found for this company.")
