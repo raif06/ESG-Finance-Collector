@@ -1,45 +1,53 @@
 import streamlit as st
 import pandas as pd
 import yfinance as yf
+import json
 
 st.title("ESG Finance Collector Dashboard")
-st.write("Interactive ESG Analytics")
+st.write("Interactive ESG Analytics for S&P 500 Companies")
 
 # ===============================
-# Step 1: Define cached ESG fetch
+# Step 1: Cached function to fetch ESG data
 # ===============================
 @st.cache_data(show_spinner=True)
-def fetch_esg_data(tickers):
+def fetch_esg_data_batch(ticker_file="sp500-tickers.json", chunk_size=50):
+    """Fetch ESG data for a large batch of tickers with caching."""
+    with open(ticker_file) as f:
+        tickers = json.load(f)
+
     data = pd.DataFrame(columns=["Company", "Environmental", "Social", "Governance"])
-    
-    for t in tickers:
-        company = yf.Ticker(t)
-        info = company.info
-        try:
-            data = pd.concat([data, pd.DataFrame([{
-                "Company": info.get("shortName", t),
-                "Environmental": info.get("environmentScore", 0),
-                "Social": info.get("socialScore", 0),
-                "Governance": info.get("governanceScore", 0)
-            }])], ignore_index=True)
-        except KeyError:
-            st.warning(f"ESG data not available for {t}")
-    
+
+    for i in range(0, len(tickers), chunk_size):
+        batch = tickers[i:i + chunk_size]
+        for t in batch:
+            company = yf.Ticker(t)
+            info = company.info
+            try:
+                data = pd.concat([data, pd.DataFrame([{
+                    "Company": info.get("shortName", t),
+                    "Environmental": info.get("environmentScore", 0),
+                    "Social": info.get("socialScore", 0),
+                    "Governance": info.get("governanceScore", 0)
+                }])], ignore_index=True)
+            except KeyError:
+                st.warning(f"ESG data not available for {t}")
+
     data.fillna(0, inplace=True)
     return data
 
 # ===============================
-# Step 2: Optional Refresh Button
+# Step 2: Refresh button
 # ===============================
 if st.button("🔄 Refresh ESG Data"):
     st.cache_data.clear()
-    st.success("Cache cleared! Reloading data...")
+    st.success("Cache cleared! Reloading ESG data...")
 
 # ===============================
-# Step 3: Fetch data
+# Step 3: Fetch data with progress
 # ===============================
-tickers = ["AAPL", "MSFT", "TSLA", "AMZN", "GOOG"]  # Add more tickers here
-data = fetch_esg_data(tickers)
+with st.spinner("Fetching ESG data for all companies..."):
+    data = fetch_esg_data_batch("sp500-tickers.json")
+st.success("✅ ESG data loaded successfully!")
 
 # ===============================
 # Step 4: Clean and validate
