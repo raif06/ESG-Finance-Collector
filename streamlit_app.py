@@ -24,7 +24,6 @@ def classify_esg(title: str) -> int:
 
 # --- Tone normalization ---
 def normalize_tone(tone: float) -> float:
-    # GDELT tone is roughly in [-10, +10]
     if tone is None:
         return 0.5
     return max(0.0, min(1.0, (tone + 10) / 20))
@@ -32,7 +31,7 @@ def normalize_tone(tone: float) -> float:
 # --- ESG score ---
 def compute_esg_score(tone: float, esg_strength: int) -> float:
     tone_norm = normalize_tone(tone)
-    esg_norm = (esg_strength or 0) / 3  # 0–1
+    esg_norm = (esg_strength or 0) / 3
     return round((0.5 * tone_norm + 0.5 * esg_norm) * 100, 2)
 
 company = st.text_input("Enter company name", "Microsoft")
@@ -46,57 +45,60 @@ if st.button("Fetch ESG News"):
         )
 
         response = requests.get(url)
-        if response.status_code != 200:
-            st.error(f"GDELT request failed with status code {response.status_code}")
-        else:
+
+        # --- SAFE JSON PARSING ---
+        try:
             data = response.json()
+        except Exception:
+            st.error("GDELT returned invalid data (not JSON). Try again in a moment.")
+            st.stop()
 
-            if "articles" in data and len(data["articles"]) > 0:
-                # ArtListWithTone returns: url, url_mobile, title, date, image, source, language, country, tone
-                df = pd.DataFrame(
-                    data["articles"],
-                    columns=[
-                        "url",
-                        "url_mobile",
-                        "title",
-                        "date",
-                        "image",
-                        "source",
-                        "language",
-                        "country",
-                        "tone",
-                    ],
-                )
+        if "articles" not in data or len(data["articles"]) == 0:
+            st.warning("No ESG articles found for this company.")
+            st.stop()
 
-                # Clean date
-                df["date"] = pd.to_datetime(df["date"], format="%Y%m%dT%H%M%SZ", errors="coerce")
+        # Build DataFrame
+        df = pd.DataFrame(
+            data["articles"],
+            columns=[
+                "url",
+                "url_mobile",
+                "title",
+                "date",
+                "image",
+                "source",
+                "language",
+                "country",
+                "tone",
+            ],
+        )
 
-                # ESG strength from title
-                df["esg_strength"] = df["title"].apply(classify_esg)
+        df["date"] = pd.to_datetime(df["date"], format="%Y%m%dT%H%M%SZ", errors="coerce")
 
-                # ESG score
-                df["esg_score"] = df.apply(
-                    lambda row: compute_esg_score(row["tone"], row["esg_strength"]),
-                    axis=1,
-                )
+        # ESG classification
+        df["esg_strength"] = df["title"].apply(classify_esg)
 
-                st.subheader(f"ESG Articles & Scores for {company}")
-                st.dataframe(df, use_container_width=True)
+        # ESG score
+        df["esg_score"] = df.apply(
+            lambda row: compute_esg_score(row["tone"], row["esg_strength"]),
+            axis=1,
+        )
 
-                # Simple summary
-                st.markdown("### ESG Score Summary")
-                st.write(
-                    f"**Average ESG score:** {df['esg_score'].mean():.2f} "
-                    f"(based on {len(df)} articles)"
-                )
+        st.subheader(f"ESG Articles & Scores for {company}")
+        st.dataframe(df, use_container_width=True)
 
-                # Download
-                csv = df.to_csv(index=False).encode("utf-8")
-                st.download_button(
-                    "Download ESG Data as CSV",
-                    csv,
-                    f"{company}_esg_news.csv",
-                    "text/csv",
-                )
-            else:
-                st.warning("No ESG articles found for this company.")
+        # Summary
+        st.markdown("### ESG Score Summary")
+        st.write(
+            f"**Average ESG score:** {df['esg_score'].mean():.2f} "
+            f"(based on {len(df)} articles)"
+        )
+
+        # Download
+        csv = df.to_csv(index=False).encode("utf-8")
+        st.download_button(
+            "Download ESG Data as CSV",
+            csv,
+            f"{company}_esg_news.csv",
+            "text/csv",
+        )
