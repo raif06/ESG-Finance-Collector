@@ -1,10 +1,11 @@
 import streamlit as st
-import requests
 import pandas as pd
+import requests
 import urllib.parse
+from io import StringIO
 
 st.set_page_config(page_title="ESG News & Score", layout="wide")
-st.title("ESG News Extractor + ESG Score (GDELT)")
+st.title("ESG News Extractor + ESG Score (GDELT - Stable CSV Mode)")
 
 # --- ESG classification ---
 def classify_esg(title: str) -> int:
@@ -24,13 +25,15 @@ def classify_esg(title: str) -> int:
     return score
 
 # --- Tone normalization ---
-def normalize_tone(tone: float) -> float:
-    if tone is None:
+def normalize_tone(tone):
+    try:
+        tone = float(tone)
+    except:
         return 0.5
     return max(0.0, min(1.0, (tone + 10) / 20))
 
 # --- ESG score ---
-def compute_esg_score(tone: float, esg_strength: int) -> float:
+def compute_esg_score(tone, esg_strength):
     tone_norm = normalize_tone(tone)
     esg_norm = (esg_strength or 0) / 3
     return round((0.5 * tone_norm + 0.5 * esg_norm) * 100, 2)
@@ -38,46 +41,39 @@ def compute_esg_score(tone: float, esg_strength: int) -> float:
 company = st.text_input("Enter company name", "Microsoft")
 
 if st.button("Fetch ESG News"):
-    with st.spinner("Fetching ESG news from GDELT..."):
+    with st.spinner("Fetching ESG news from GDELT (CSV mode)..."):
         
-        # --- URL-encoded query ---
         raw_query = f"{company} AND (sustainability OR environment OR governance OR ethics)"
         encoded_query = urllib.parse.quote(raw_query)
 
         url = (
             "https://api.gdeltproject.org/api/v2/doc/doc"
-            f"?query={encoded_query}&mode=ArtListWithTone&format=json"
+            f"?query={encoded_query}&mode=ArtListWithTone&format=csv"
         )
 
         response = requests.get(url)
 
-        # --- SAFE JSON PARSING ---
-        try:
-            data = response.json()
-        except Exception:
-            st.error("GDELT returned invalid data (not JSON). This usually means the API is overloaded or the query was rejected. Try again in a moment.")
+        if response.status_code != 200:
+            st.error("GDELT request failed.")
             st.stop()
 
-        if "articles" not in data or len(data["articles"]) == 0:
+        try:
+            df = pd.read_csv(StringIO(response.text), header=None)
+        except:
+            st.error("GDELT returned invalid CSV. Try again later.")
+            st.stop()
+
+        if df.empty:
             st.warning("No ESG articles found for this company.")
             st.stop()
 
-        # Build DataFrame
-        df = pd.DataFrame(
-            data["articles"],
-            columns=[
-                "url",
-                "url_mobile",
-                "title",
-                "date",
-                "image",
-                "source",
-                "language",
-                "country",
-                "tone",
-            ],
-        )
+        # Assign column names
+        df.columns = [
+            "url", "url_mobile", "title", "date", "image",
+            "source", "language", "country", "tone"
+        ]
 
+        # Clean date
         df["date"] = pd.to_datetime(df["date"], format="%Y%m%dT%H%M%SZ", errors="coerce")
 
         # ESG classification
