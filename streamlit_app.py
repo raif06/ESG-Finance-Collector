@@ -2,7 +2,6 @@ import streamlit as st
 import requests
 import pandas as pd
 import urllib.parse
-from textblob import TextBlob
 
 st.set_page_config(page_title="ESG News & Score", layout="wide")
 st.title("ESG News Extractor + ESG Score (Stable GDELT Search API)")
@@ -24,12 +23,21 @@ def classify_esg(title: str) -> int:
 
     return score
 
-# --- Sentiment using TextBlob ---
-def sentiment_score(text):
-    try:
-        return (TextBlob(text).sentiment.polarity + 1) / 2  # convert -1..1 → 0..1
-    except:
-        return 0.5
+# --- Simple rule-based sentiment (no external libraries) ---
+def sentiment_score(title: str) -> float:
+    title = (title or "").lower()
+
+    positive_words = ["improve", "growth", "positive", "sustainable", "award", "recognition"]
+    negative_words = ["risk", "lawsuit", "pollution", "controversy", "violation", "fraud"]
+
+    score = 0.5  # neutral baseline
+
+    if any(w in title for w in positive_words):
+        score += 0.25
+    if any(w in title for w in negative_words):
+        score -= 0.25
+
+    return max(0.0, min(1.0, score))
 
 # --- ESG score ---
 def compute_esg_score(sentiment, esg_strength):
