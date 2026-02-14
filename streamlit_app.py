@@ -25,9 +25,7 @@ if not all(col in data.columns for col in required_cols):
     st.stop()
 
 # ---- Calculate Overall ESG Score ----
-data["Overall ESG"] = data[
-    ["Environmental", "Social", "Governance"]
-].mean(axis=1)
+data["Overall ESG"] = data[["Environmental", "Social", "Governance"]].mean(axis=1)
 
 # ---- ESG Ranking ----
 data["Rank"] = data["Overall ESG"].rank(ascending=False)
@@ -43,6 +41,9 @@ def esg_grade(score):
     else:
         return "BBB"
 
+# ✅ Apply ESG Grade BEFORE top company
+data["ESG Grade"] = data["Overall ESG"].apply(esg_grade)
+
 # ---- Top ESG Performer Highlight ----
 top_company = data.sort_values("Overall ESG", ascending=False).iloc[0]
 
@@ -50,8 +51,6 @@ st.success(
     f"🏆 Top ESG Company: {top_company['Company']} "
     f"({top_company['ESG Grade']})"
 )
-
-data["ESG Grade"] = data["Overall ESG"].apply(esg_grade)
 
 # ===============================
 # VISUAL ANALYTICS SECTION
