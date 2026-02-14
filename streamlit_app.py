@@ -1,6 +1,7 @@
 import streamlit as st
 import requests
 import pandas as pd
+import urllib.parse   # <-- You forgot this import
 
 st.set_page_config(page_title="ESG News & Score", layout="wide")
 st.title("ESG News Extractor + ESG Score (NewsAPI Stable Version)")
@@ -50,11 +51,15 @@ company = st.text_input("Enter company name", "Microsoft")
 if st.button("Fetch ESG News"):
     with st.spinner("Fetching ESG news from NewsAPI..."):
 
-        query = f"{company} sustainability OR {company} environment OR {company} governance OR {company} ethics"
+        # ✅ Correct query placement + indentation
+        query = (
+            f"{company} AND (sustainability OR ESG OR environment OR climate OR governance OR ethics)"
+        )
 
+        # ✅ Correct URL placement + indentation
         url = (
             f"https://newsapi.org/v2/everything?"
-            f"q={query}&"
+            f"q={urllib.parse.quote(query)}&"
             f"language=en&"
             f"sortBy=publishedAt&"
             f"apiKey={API_KEY}"
