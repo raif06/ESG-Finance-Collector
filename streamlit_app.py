@@ -1,10 +1,11 @@
 import streamlit as st
 import requests
 import pandas as pd
-import urllib.parse
 
 st.set_page_config(page_title="ESG News & Score", layout="wide")
-st.title("ESG News Extractor + ESG Score (Stable GDELT Search API)")
+st.title("ESG News Extractor + ESG Score (NewsAPI Stable Version)")
+
+API_KEY = st.secrets["NEWSAPI_KEY"]
 
 # --- ESG classification ---
 def classify_esg(title: str) -> int:
@@ -23,14 +24,14 @@ def classify_esg(title: str) -> int:
 
     return score
 
-# --- Simple rule-based sentiment (no external libraries) ---
+# --- Simple sentiment ---
 def sentiment_score(title: str) -> float:
     title = (title or "").lower()
 
     positive_words = ["improve", "growth", "positive", "sustainable", "award", "recognition"]
     negative_words = ["risk", "lawsuit", "pollution", "controversy", "violation", "fraud"]
 
-    score = 0.5  # neutral baseline
+    score = 0.5
 
     if any(w in title for w in positive_words):
         score += 0.25
@@ -47,38 +48,31 @@ def compute_esg_score(sentiment, esg_strength):
 company = st.text_input("Enter company name", "Microsoft")
 
 if st.button("Fetch ESG News"):
-    with st.spinner("Fetching ESG news from GDELT (stable mode)..."):
-        
-        raw_query = f"{company} sustainability OR {company} environment OR {company} governance OR {company} ethics"
-        encoded_query = urllib.parse.quote(raw_query)
+    with st.spinner("Fetching ESG news from NewsAPI..."):
 
-        url = f"https://api.gdeltproject.org/api/v2/doc/search?query={encoded_query}&format=json"
+        query = f"{company} sustainability OR {company} environment OR {company} governance OR {company} ethics"
+
+        url = (
+            f"https://newsapi.org/v2/everything?"
+            f"q={query}&"
+            f"language=en&"
+            f"sortBy=publishedAt&"
+            f"apiKey={API_KEY}"
+        )
 
         response = requests.get(url)
+        data = response.json()
 
-        try:
-            data = response.json()
-        except:
-            st.error("GDELT returned invalid data. Try again later.")
-            st.stop()
-
-        if "articles" not in data or len(data["articles"]) == 0:
+        if data.get("status") != "ok" or len(data.get("articles", [])) == 0:
             st.warning("No ESG articles found for this company.")
             st.stop()
 
         df = pd.DataFrame(data["articles"])
 
-        # Clean date
-        if "date" in df.columns:
-            df["date"] = pd.to_datetime(df["date"], errors="coerce")
+        df["date"] = pd.to_datetime(df["publishedAt"], errors="coerce")
 
-        # ESG classification
         df["esg_strength"] = df["title"].apply(classify_esg)
-
-        # Sentiment
         df["sentiment"] = df["title"].apply(sentiment_score)
-
-        # ESG score
         df["esg_score"] = df.apply(
             lambda row: compute_esg_score(row["sentiment"], row["esg_strength"]),
             axis=1,
@@ -87,14 +81,6 @@ if st.button("Fetch ESG News"):
         st.subheader(f"ESG Articles & Scores for {company}")
         st.dataframe(df, use_container_width=True)
 
-        # Summary
-        st.markdown("### ESG Score Summary")
-        st.write(
-            f"**Average ESG score:** {df['esg_score'].mean():.2f} "
-            f"(based on {len(df)} articles)"
-        )
-
-        # Download
         csv = df.to_csv(index=False).encode("utf-8")
         st.download_button(
             "Download ESG Data as CSV",
