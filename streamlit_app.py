@@ -1,6 +1,7 @@
 import streamlit as st
 import requests
 import pandas as pd
+import urllib.parse
 
 st.set_page_config(page_title="ESG News & Score", layout="wide")
 st.title("ESG News Extractor + ESG Score (GDELT)")
@@ -38,10 +39,14 @@ company = st.text_input("Enter company name", "Microsoft")
 
 if st.button("Fetch ESG News"):
     with st.spinner("Fetching ESG news from GDELT..."):
-        query = f"{company} AND (sustainability OR environment OR governance OR ethics)"
+        
+        # --- URL-encoded query ---
+        raw_query = f"{company} AND (sustainability OR environment OR governance OR ethics)"
+        encoded_query = urllib.parse.quote(raw_query)
+
         url = (
             "https://api.gdeltproject.org/api/v2/doc/doc"
-            f"?query={query}&mode=ArtListWithTone&format=json"
+            f"?query={encoded_query}&mode=ArtListWithTone&format=json"
         )
 
         response = requests.get(url)
@@ -50,7 +55,7 @@ if st.button("Fetch ESG News"):
         try:
             data = response.json()
         except Exception:
-            st.error("GDELT returned invalid data (not JSON). Try again in a moment.")
+            st.error("GDELT returned invalid data (not JSON). This usually means the API is overloaded or the query was rejected. Try again in a moment.")
             st.stop()
 
         if "articles" not in data or len(data["articles"]) == 0:
