@@ -1,25 +1,34 @@
 import streamlit as st
 import pandas as pd
+import yfinance as yf
 
 st.title("ESG Finance Collector Dashboard")
 st.write("Interactive ESG Analytics")
 
-# ---- File Upload Option ----
-uploaded_file = st.file_uploader(
-    "Upload ESG Dataset (CSV)", type=["csv"]
-)
+# ---- Automatic ESG data fetch ----
+tickers = ["AAPL", "MSFT", "TSLA", "AMZN", "GOOG"]  # Add more tickers if needed
+data = pd.DataFrame(columns=["Company", "Environmental", "Social", "Governance"])
 
-if uploaded_file is not None:
-    data = pd.read_csv(uploaded_file)
-else:
-    data = pd.read_csv("esg_data.csv")
+for t in tickers:
+    company = yf.Ticker(t)
+    info = company.info
+    try:
+        data = pd.concat([data, pd.DataFrame([{
+            "Company": info["shortName"],
+            "Environmental": info.get("environmentScore", 0),
+            "Social": info.get("socialScore", 0),
+            "Governance": info.get("governanceScore", 0)
+        }])], ignore_index=True)
+    except KeyError:
+        st.warning(f"ESG data not available for {t}")
+
+data.fillna(0, inplace=True)
 
 # ✅ Clean column names
 data.columns = data.columns.str.strip()
 
 # ✅ Validate dataset
 required_cols = ["Company", "Environmental", "Social", "Governance"]
-
 if not all(col in data.columns for col in required_cols):
     st.error("Dataset must contain columns: Company, Environmental, Social, Governance")
     st.stop()
@@ -46,10 +55,8 @@ data["ESG Grade"] = data["Overall ESG"].apply(esg_grade)
 
 # ---- Top ESG Performer Highlight ----
 top_company = data.sort_values("Overall ESG", ascending=False).iloc[0]
-
 st.success(
-    f"🏆 Top ESG Company: {top_company['Company']} "
-    f"({top_company['ESG Grade']})"
+    f"🏆 Top ESG Company: {top_company['Company']} ({top_company['ESG Grade']})"
 )
 
 # ===============================
@@ -88,5 +95,4 @@ selected_data = data[data["Company"] == company]
 
 st.subheader(f"Detailed ESG Scores for {company}")
 st.dataframe(selected_data)
-
 st.bar_chart(selected_data.set_index("Company"))
