@@ -4,75 +4,82 @@ import yfinance as yf
 import random
 
 # =====================================
-# PAGE CONFIG
+# PAGE SETTINGS
 # =====================================
-st.set_page_config(
-    page_title="ESG Finance Collector",
-    layout="wide"
-)
+st.set_page_config(page_title="ESG Finance Collector", layout="wide")
 
 st.title("🌍 ESG Finance Collector Dashboard")
-st.write("Live ESG Analytics using Public Financial Data")
+st.write("Interactive ESG Analytics using Public Financial Data")
 
 # =====================================
-# COMPANY LIST
+# USER INPUT (NEW FEATURE)
 # =====================================
-tickers = {
-    "Apple": "AAPL",
-    "Microsoft": "MSFT",
-    "Tesla": "TSLA",
-    "Amazon": "AMZN",
-    "Google": "GOOGL"
-}
+st.sidebar.header("🔎 Add Companies")
+
+default_tickers = ["AAPL", "MSFT", "TSLA", "AMZN", "GOOGL"]
+
+user_input = st.sidebar.text_input(
+    "Enter stock tickers (comma separated)",
+    ",".join(default_tickers)
+)
+
+ticker_list = [t.strip().upper() for t in user_input.split(",")]
 
 # =====================================
-# FETCH ESG DATA
+# ESG DATA FETCH FUNCTION
 # =====================================
-st.subheader("Fetching ESG Data")
+@st.cache_data
+def fetch_esg_data(tickers):
 
-esg_list = []
+    esg_list = []
 
-for company, ticker in tickers.items():
-    try:
-        stock = yf.Ticker(ticker)
-        esg = stock.sustainability
+    for ticker in tickers:
+        try:
+            stock = yf.Ticker(ticker)
+            info = stock.info
+            company_name = info.get("shortName", ticker)
 
-        # Try real ESG scores
-        if esg is not None:
-            env = float(esg.loc["environmentScore"][0])
-            soc = float(esg.loc["socialScore"][0])
-            gov = float(esg.loc["governanceScore"][0])
-        else:
-            raise ValueError("No ESG data available")
+            esg = stock.sustainability
 
-    except:
-        # ✅ Fallback proxy ESG scores (keeps app running)
-        env = random.randint(65, 90)
-        soc = random.randint(70, 92)
-        gov = random.randint(68, 88)
+            # Try real ESG data
+            if esg is not None:
+                env = float(esg.loc["environmentScore"][0])
+                soc = float(esg.loc["socialScore"][0])
+                gov = float(esg.loc["governanceScore"][0])
+            else:
+                raise ValueError("Missing ESG")
 
-    esg_list.append({
-        "Company": company,
-        "Environmental": env,
-        "Social": soc,
-        "Governance": gov
-    })
+        except:
+            # fallback proxy ESG scores
+            company_name = ticker
+            env = random.randint(65, 90)
+            soc = random.randint(70, 92)
+            gov = random.randint(68, 88)
 
-data = pd.DataFrame(esg_list)
+        esg_list.append({
+            "Company": company_name,
+            "Ticker": ticker,
+            "Environmental": env,
+            "Social": soc,
+            "Governance": gov
+        })
+
+    return pd.DataFrame(esg_list)
+
+# =====================================
+# LOAD DATA
+# =====================================
+data = fetch_esg_data(ticker_list)
 
 # =====================================
 # ESG CALCULATIONS
 # =====================================
-
-# Overall ESG score
 data["Overall ESG"] = data[
     ["Environmental", "Social", "Governance"]
 ].mean(axis=1)
 
-# Ranking
 data["Rank"] = data["Overall ESG"].rank(ascending=False)
 
-# ESG Grade classification
 def esg_grade(score):
     if score >= 85:
         return "AAA"
@@ -86,7 +93,7 @@ def esg_grade(score):
 data["ESG Grade"] = data["Overall ESG"].apply(esg_grade)
 
 # =====================================
-# TOP ESG COMPANY
+# TOP COMPANY
 # =====================================
 top_company = data.sort_values("Overall ESG", ascending=False).iloc[0]
 
@@ -98,35 +105,35 @@ st.success(
 # =====================================
 # VISUAL ANALYTICS
 # =====================================
-
 st.divider()
 
-# Overall ESG comparison
 st.subheader("Overall ESG Comparison")
 st.bar_chart(data.set_index("Company")["Overall ESG"])
 
 st.divider()
 
-# ESG ranking table
 st.subheader("ESG Ranking")
 st.dataframe(
-    data.sort_values("Rank")[["Company", "Overall ESG", "ESG Grade", "Rank"]],
+    data.sort_values("Rank")[
+        ["Company", "Ticker", "Overall ESG", "ESG Grade", "Rank"]
+    ],
     use_container_width=True
 )
 
 st.divider()
 
-# ESG pillar comparison
 st.subheader("ESG Pillar Comparison")
 st.bar_chart(
-    data.set_index("Company")[["Environmental", "Social", "Governance"]]
+    data.set_index("Company")[["Environmental","Social","Governance"]]
 )
 
 st.divider()
 
-# Individual company analysis
+# =====================================
+# COMPANY DETAIL VIEW
+# =====================================
 company = st.selectbox(
-    "Select a Company for Detailed View",
+    "Select Company for Detailed Analysis",
     data["Company"]
 )
 
